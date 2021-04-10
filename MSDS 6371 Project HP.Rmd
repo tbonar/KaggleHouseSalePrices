@@ -1,0 +1,200 @@
+---
+title: "MSDS 6371 Project"
+author: "Halle"
+date: "4/4/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+#loading libraries
+```{r}
+library(ggplot2)
+library(naniar)
+library(tidyr)
+library(tidyverse)
+library(plyr)
+library(GGally)
+library(ggthemes)
+library(dplyr)
+library(caret)
+library(class)
+library(e1071)
+library(tm)
+library(plotly)
+```
+
+#getting/examining the data
+```{r}
+train = read.csv("/Users/hallepurdom/Desktop/SMU/Classes/Stats Project/house-prices-advanced-regression-techniques/train.csv", header = TRUE)
+test = read.csv("/Users/hallepurdom/Desktop/SMU/Classes/Stats Project/house-prices-advanced-regression-techniques/test.csv", header = TRUE)
+
+gg_miss_var(train)
+```
+
+#filter for NAmes, Edwards and BrkSide neighborhoods
+```{r}
+train_filtered = train %>% filter(train$Neighborhood == "NAmes"|train$Neighborhood =="Edwards"|train$Neighborhood =="BrkSide")
+```
+
+#salesprice relation to square footage
+```{r}
+fit = lm(SalePrice~GrLivArea, data=train_filtered)
+summary(fit)
+confint(fit)
+par(mfrow = c(2, 2))
+plot(fit)
+preds = predict(fit)
+train_filtered %>% ggplot(aes(y = SalePrice, x = GrLivArea)) + geom_point() + geom_smooth(method = "lm")
+train_filtered %>% ggplot(aes(y = SalePrice, x = GrLivArea)) + geom_point() + geom_line(data = train_filtered, aes( x = GrLivArea, y = preds))
+```
+
+#log transforming data
+```{r}
+train_log = data.frame(train_filtered$GrLivArea,train_filtered$SalePrice,train_filtered$Neighborhood)
+names(train_log) <- c('GrLivArea', 'SalePrice','Neighborhood')
+train_log$lGrLivArea = log(train_log$GrLivArea)
+train_log$lSalePrice = log(train_log$SalePrice)
+head(train_log)
+```
+#different log transform options -- 1
+```{r}
+#1
+fit1 = lm(SalePrice~lGrLivArea, data=train_log)
+summary(fit1)
+confint(fit1)
+par(mfrow = c(2, 2))
+plot(fit1)
+preds1 = predict(fit1)
+train_log %>% ggplot(aes(y = SalePrice, x = lGrLivArea)) + geom_point() + geom_smooth(method = "lm")
+train_log %>% ggplot(aes(y = SalePrice, x = lGrLivArea)) + geom_point() + geom_line(data = train_log, aes( x = lGrLivArea, y = preds1))
+```
+
+#different log transform options -- 2
+```{r}
+fit2 = lm(lSalePrice~GrLivArea, data=train_log)
+summary(fit2)
+confint(fit2)
+par(mfrow = c(2, 2))
+plot(fit2)
+preds2 = predict(fit2)
+train_log %>% ggplot(aes(y = lSalePrice, x = GrLivArea)) + geom_point() + geom_smooth(method = "lm")
+train_log %>% ggplot(aes(y = lSalePrice, x = GrLivArea)) + geom_point() + geom_line(data = train_log, aes( x = GrLivArea, y = preds2))
+```
+
+#different log transform options -- 3
+```{r}
+fit3 = lm(lSalePrice~lGrLivArea, data=train_log)
+summary(fit3)
+confint(fit3)
+par(mfrow = c(2, 2))
+plot(fit3)
+preds3 = predict(fit3)
+train_log %>% ggplot(aes(y = lSalePrice, x = lGrLivArea)) + geom_point() + geom_smooth(method = "lm")
+train_log %>% ggplot(aes(y = lSalePrice, x = lGrLivArea)) + geom_point() + geom_line(data = train_log, aes( x = lGrLivArea, y = preds3))
+```
+#separating based on neighborhood
+```{r}
+fit4 = lm(lSalePrice~lGrLivArea+ Neighborhood, data=train_log)
+summary(fit4)
+confint(fit4)
+par(mfrow = c(2, 2))
+plot(fit4)
+preds4 = predict(fit4)
+train_log %>% ggplot(aes(y = lSalePrice, x = lGrLivArea, color=Neighborhood)) + geom_point() + geom_smooth(method = "lm")
+train_log %>% ggplot(aes(y = lSalePrice, x = lGrLivArea, color=Neighborhood)) + geom_point() + geom_line(data = train_log, aes(group=Neighborhood, x = lGrLivArea, y = preds4))
+```
+
+
+
+#selection models library
+```{r}
+library(olsrr)
+library(cowplot)
+library(ggplot2)
+library(IDPmisc)
+```
+
+#only int and numeric type
+```{r}
+train_q2 = data.frame(train)
+
+train_q2$lGrLivArea = log(train_q2$GrLivArea)
+train_q2$lSalePrice = log(train_q2$SalePrice)
+
+for(i in 1:ncol(train_q2)) {      
+  if(typeof(train_q2[ , i]) == "integer" | typeof(train_q2[ , i]) == "double"){
+    cat('"',colnames(train_q2)[i],'"',"= train_q2$",sep="", colnames(train_q2)[i], ", ")
+  }
+}
+
+train_q2 <- data.frame("Id"= train_q2$Id, "MSSubClass"= train_q2$MSSubClass, "LotFrontage"= train_q2$LotFrontage, "LotArea"= train_q2$LotArea, "OverallQual"= train_q2$OverallQual, "OverallCond"= train_q2$OverallCond, "YearBuilt"= train_q2$YearBuilt, "YearRemodAdd"= train_q2$YearRemodAdd, "MasVnrArea"= train_q2$MasVnrArea, "BsmtFinSF1"= train_q2$BsmtFinSF1, "BsmtFinSF2"= train_q2$BsmtFinSF2, "BsmtUnfSF"= train_q2$BsmtUnfSF, "TotalBsmtSF"= train_q2$TotalBsmtSF, "X1stFlrSF"= train_q2$X1stFlrSF, "X2ndFlrSF"= train_q2$X2ndFlrSF, "LowQualFinSF"= train_q2$LowQualFinSF, "BsmtFullBath"= train_q2$BsmtFullBath, "BsmtHalfBath"= train_q2$BsmtHalfBath, "FullBath"= train_q2$FullBath, "HalfBath"= train_q2$HalfBath, "BedroomAbvGr"= train_q2$BedroomAbvGr, "KitchenAbvGr"= train_q2$KitchenAbvGr, "TotRmsAbvGrd"= train_q2$TotRmsAbvGrd, "Fireplaces"= train_q2$Fireplaces, "GarageYrBlt"= train_q2$GarageYrBlt, "GarageCars"= train_q2$GarageCars, "GarageArea"= train_q2$GarageArea, "WoodDeckSF"= train_q2$WoodDeckSF, "OpenPorchSF"= train_q2$OpenPorchSF, "EnclosedPorch"= train_q2$EnclosedPorch, "X3SsnPorch"= train_q2$X3SsnPorch, "ScreenPorch"= train_q2$ScreenPorch, "PoolArea"= train_q2$PoolArea, "MiscVal"= train_q2$MiscVal, "MoSold"= train_q2$MoSold, "YrSold"= train_q2$YrSold, "lGrLivArea"= train_q2$lGrLivArea, "lSalePrice"= train_q2$lSalePrice) #removed sale price and grlivarea
+```
+
+#adding logged variables to train dataset
+```{r}
+
+#TotalBsmtSF 
+train_q2$lTotalBsmtSF = log(train_q2$TotalBsmtSF)
+lTotalBsmtSF <- train_q2%>%ggplot(aes(x=lTotalBsmtSF, y=lSalePrice))+geom_point()+geom_smooth(method="lm")
+TotalBsmtSF <- train_q2%>%ggplot(aes(x=TotalBsmtSF, y=lSalePrice))+geom_point()+geom_smooth(method="lm")
+plot_grid(TotalBsmtSF,lTotalBsmtSF, labels = "AUTO")
+
+#X1stFlrSF 
+train_q2$lX1stFlrSF = log(train_q2$X1stFlrSF)
+lX1stFlrSF <- train_q2%>%ggplot(aes(x=lX1stFlrSF, y=lSalePrice))+geom_point()+geom_smooth(method="lm")
+X1stFlrSF <- train_q2%>%ggplot(aes(x=X1stFlrSF, y=lSalePrice))+geom_point()+geom_smooth(method="lm")
+plot_grid(X1stFlrSF,lX1stFlrSF, labels = "AUTO")
+
+#X2ndFlrSF
+train_q2$lX2ndFlrSF = log(train_q2$X2ndFlrSF)
+lX2ndFlrSF <- train_q2%>%ggplot(aes(x=lX2ndFlrSF, y=lSalePrice))+geom_point()+geom_smooth(method="lm")
+X2ndFlrSF <- train_q2%>%ggplot(aes(x=X2ndFlrSF, y=lSalePrice))+geom_point()+geom_smooth(method="lm")
+plot_grid(X2ndFlrSF,lX2ndFlrSF, labels = "AUTO")
+```
+
+#missing vars train_q2
+```{r}
+gg_miss_var(train_q2)
+#lot frontage, garage year built, MasVnrArea
+```
+
+#remove lot frontage, garage year built, and masvnrarea
+```{r}
+
+train_q2 <- data.frame("Id"= train_q2$Id, "MSSubClass"= train_q2$MSSubClass, "LotArea"= train_q2$LotArea, "OverallQual"= train_q2$OverallQual, "OverallCond"= train_q2$OverallCond, "YearBuilt"= train_q2$YearBuilt, "YearRemodAdd"= train_q2$YearRemodAdd, "BsmtFinSF1"= train_q2$BsmtFinSF1, "BsmtFinSF2"= train_q2$BsmtFinSF2, "BsmtUnfSF"= train_q2$BsmtUnfSF, "TotalBsmtSF"= train_q2$TotalBsmtSF, "X1stFlrSF"= train_q2$X1stFlrSF, "X2ndFlrSF"= train_q2$X2ndFlrSF, "LowQualFinSF"= train_q2$LowQualFinSF, "BsmtFullBath"= train_q2$BsmtFullBath, "BsmtHalfBath"= train_q2$BsmtHalfBath, "FullBath"= train_q2$FullBath, "HalfBath"= train_q2$HalfBath, "BedroomAbvGr"= train_q2$BedroomAbvGr, "KitchenAbvGr"= train_q2$KitchenAbvGr, "TotRmsAbvGrd"= train_q2$TotRmsAbvGrd, "Fireplaces"= train_q2$Fireplaces, "GarageCars"= train_q2$GarageCars, "GarageArea"= train_q2$GarageArea, "WoodDeckSF"= train_q2$WoodDeckSF, "OpenPorchSF"= train_q2$OpenPorchSF, "EnclosedPorch"= train_q2$EnclosedPorch, "X3SsnPorch"= train_q2$X3SsnPorch, "ScreenPorch"= train_q2$ScreenPorch, "PoolArea"= train_q2$PoolArea, "MiscVal"= train_q2$MiscVal, "MoSold"= train_q2$MoSold, "YrSold"= train_q2$YrSold, "lGrLivArea"= train_q2$lGrLivArea, "lSalePrice"= train_q2$lSalePrice, "lX2ndFlrSF"= train_q2$lX2ndFlrSF, "lTotalBsmtSF"= train_q2$lTotalBsmtSF, "lX1stFlrSF"= train_q2$lX1stFlrSF)
+```
+
+
+#Error in lm.fit(x, y, offset = offset, singular.ok = singular.ok, ...) : NA/NaN/Inf in 'x'
+```{r}
+train_q2 <- NaRV.omit(train_q2)
+```
+
+#forward
+```{r}
+model_f <- lm(lSalePrice ~., data = train_q2)
+f <-ols_step_forward_p(model_f, details=TRUE)
+plot(f)
+f
+```
+
+#backward
+```{r}
+model_b <- lm(lSalePrice ~ ., data = train_q2)
+b <-ols_step_backward_p(model_b, details = TRUE)
+plot(b)
+b
+```
+
+
+#stepwwise
+```{r}
+model_s <- lm(lSalePrice ~ ., data = train_q2)
+s <-ols_step_both_p(model_s, details = TRUE)
+plot(s)
+s
+```
+
+
