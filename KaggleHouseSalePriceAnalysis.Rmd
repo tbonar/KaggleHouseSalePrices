@@ -54,14 +54,19 @@ train_filtered = train %>% filter(Neighborhood == "NAmes" | Neighborhood == "Edw
 fit = lm(SalePrice~GrLivArea, data=train_filtered)
 ## Find the overall Summary and Confidence Interval of our Linear Model
 # Option 1 for auto-generating summary statistics -- PDF doesn't like, good for HTML quick referencing
-#tab_model(fit, show.se = T, show.stat = T, show.aic = T, show.aicc = T,
-#          string.stat = "t-value", string.p = "p-value", string.se = "Std. Error", pred.labels = #c("Intercept", "Sq. Ft. of Living Area"))
+#tab_model(fit, show.se = T, show.stat = T, string.stat = "t-value", string.p = "p-value", string.se = "Std. Error", pred.labels = #c("Intercept", "Sq. Ft. of Living Area"))
 # Option 2 - Use for PDF
 summary(fit)
 confint(fit)
 CV(fit)
 ```
+
 ## Step 2: Checking Assumptions
+Assumptions:
+- There is a normally distributed sub-population of responses for each value of the explanatory variable (Normalacy)
+- The means of the sub-populations fall on a straight line function of the explanatory variable (Linear Relationship)
+- The sub-population standard deviation are all equal (to $\sigma$) (Equivalent Variation)
+- The selection of an observation from any of the sub-populations is independent of the selection of any other observation (Independence)
 ### Examining Residual Plots & Influential Points
 ```{r Initial Model Plots, echo=F}
 resid_panel(fit, plots=c("resid","qq","ls","index","cookd","lev"))
@@ -83,6 +88,7 @@ train_filtered %>% ggplot(aes(y = SalePrice, x = GrLivArea)) +
   ylab("House Sale Price") +
   scale_y_continuous(labels = comma)
 ```
+Generally speaking, our initial model demonstrates a medium positive linear association between a living room square footage and the sale price of a home in our three neighborhoods ($r^2=.342$, $adjr^2 = .341$).
 ## Step 3: Comparing Competing Models
 ```{r Transformations, echo=F}
 # Create a new train set with log transformations w/ desired variables
