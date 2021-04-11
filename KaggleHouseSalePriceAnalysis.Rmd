@@ -1,75 +1,73 @@
 ---
 title: "MSDS 6371 Project"
 author: "Halle Purdom & Taylor Bonar"
-date: "4/4/2021"
-output: html_document
+date: "4/11/2021"
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
 #loading libraries
+library(GGally)
+library(ggthemes)
 library(ggplot2)
-library(ggResidpanel)
+library(ggResidpanel) # Residual Plots (e.g. resid_panel())
+library(scales) # Scales used to correct some of the scaling on graphs
 library(naniar)
 library(tidyr)
 library(tidyverse)
 library(plyr)
-library(GGally)
-library(ggthemes)
 library(dplyr)
 library(caret)
 library(class)
 library(e1071)
 library(tm)
 library(plotly)
-library(scales)
+library(olsrr)
+library(cowplot)
+library(IDPmisc)
+# HTML CSS - Libraries for Coefficient Table (e.g. tab_model())
 library(sjPlot)
 library(sjmisc)
 library(sjlabelled)
+# Cross-Validation Statistic CV() Library
+library(forecast)
 
 train = read.csv("./train.csv", header = TRUE)
 test = read.csv("./test.csv", header = TRUE)
 
 ```
 
-# Initial Examination of the Datasets
-```{r}
-gg_miss_var(train)
-```
-
-
 # Analysis 1: How does the Square Footage of the Living Area Affect Sale Prices for the Houses in North Ames, Edwards, and Brookside?
 
-## Step 1: Building and Fitting Our Initial Model:
-$$
-\hat{Sale Price} =  \hat{\beta_0} + \hat{\beta_1} * Living Area ft^2
-$$
-```{r}
+## Step 1: Building and Fitting Our Initial Model
+Initial Model: $\hat{Sale Price} =  \hat{\beta_0} + \hat{\beta_1} (Living Area ft^2)$
+```{r Initial Fit, echo=F}
 # Filtering for desired neighborhoods into a separate dataframe
 train_filtered = train %>% filter(Neighborhood == "NAmes" | Neighborhood == "Edwards" | Neighborhood == "BrkSide")
 
 # Sales Prices' relation to square footage of the Living Area
 ## Create linear model of Response (SalePrice) to Explanatory Variables (GrLivArea)
-fit1 = lm(SalePrice~GrLivArea, data=train_filtered)
+fit = lm(SalePrice~GrLivArea, data=train_filtered)
 ## Find the overall Summary and Confidence Interval of our Linear Model
-# Option 1 for auto-generating summary statistics:
-tab_model(fit1, show.se = T, show.stat = T, show.aic = T, show.aicc = T,
-          string.stat = "t-value", string.p = "p-value", string.se = "Std. Error", pred.labels = c("Intercept", "Sq. Ft. of Living Area"))
-# Option 2
-summary(fit1)
-confint(fit1)
+# Option 1 for auto-generating summary statistics -- PDF doesn't like, good for HTML quick referencing
+#tab_model(fit, show.se = T, show.stat = T, show.aic = T, show.aicc = T,
+#          string.stat = "t-value", string.p = "p-value", string.se = "Std. Error", pred.labels = #c("Intercept", "Sq. Ft. of Living Area"))
+# Option 2 - Use for PDF
+summary(fit)
+confint(fit)
+CV(fit)
 ```
 ## Step 2: Checking Assumptions
 ### Examining Residual Plots & Influential Points
-```{r Residual Plots, echo=F}
-resid_panel(fit1, plots=c("resid","qq","ls","index","cookd","lev"))
-```
+```{r Initial Model Plots, echo=F}
+resid_panel(fit, plots=c("resid","qq","ls","index","cookd","lev"))
 
-### Addressing Assumptions
-```{r}
 ## Generate Linear Regression Line
-preds = predict(fit1)
+preds = predict(fit)
 train_filtered %>% ggplot(aes(y = SalePrice, x = GrLivArea)) +
   geom_point() + geom_smooth(method = "lm", formula = y~x) +
   ggtitle("Linear Regression Model: Living Area vs. Sale Price", "For Houses in North Ames, Edwards, and Brookside Neighborhoods")  +
@@ -85,77 +83,79 @@ train_filtered %>% ggplot(aes(y = SalePrice, x = GrLivArea)) +
   ylab("House Sale Price") +
   scale_y_continuous(labels = comma)
 ```
-
-
-# Performing Log Transforming on Data for GrLiveArea and SalePrice as New Columns
-```{r}
+## Step 3: Comparing Competing Models
+```{r Transformations, echo=F}
 # Create a new train set with log transformations w/ desired variables
 train_log = train_filtered %>% data.frame(train_filtered$GrLivArea,train_filtered$SalePrice,train_filtered$Neighborhood)
 # Translate names
 names(train_log) <- c('GrLivArea', 'SalePrice','Neighborhood')
 train_log$lGrLivArea = log(train_log$GrLivArea)
 train_log$lSalePrice = log(train_log$SalePrice)
-head(train_log)
 ```
-## Log Transform only GrLivArea
-```{r}
+### normal-log Model Analysis: 
+$\hat{Sale Price} =  \hat{\beta_0} + \hat{\beta_1} (log(Living Area ft^2))$
+```{r logGrLivArea Analysis, echo=F}
 fit1 = lm(SalePrice~lGrLivArea, data=train_log)
+# Option 1 for auto-generating summary statistics -- PDF doesn't like, good for HTML quick referencing
+#tab_model(fit1, show.se = T, show.stat = T, string.stat = "t-value", string.p = "p-value", string.se = "Std. Error", pred.labels = #c("Intercept", "Sq. Ft. of Living Area"))
 summary(fit1)
 confint(fit1)
-par(mfrow = c(2, 2))
-plot(fit1)
+CV(fit1)
+resid_panel(fit1, plots=c("resid","qq","ls","index","cookd","lev"))
 preds1 = predict(fit1)
-train_log %>% ggplot(aes(y = SalePrice, x = lGrLivArea)) + geom_point() + geom_smooth(method = "lm")
+train_log %>% ggplot(aes(y = SalePrice, x = lGrLivArea)) + geom_point() + geom_smooth(method = "lm",formula = y~x)
 train_log %>% ggplot(aes(y = SalePrice, x = lGrLivArea)) + geom_point() + geom_line(data = train_log, aes( x = lGrLivArea, y = preds1))
 ```
-
-## Log Transform only Sale Price
-```{r}
+### log-normal Model Analysis:
+Model: $log(\hat{Sale Price}) =  \hat{\beta_0} + \hat{\beta_1} (Living Area ft^2)$
+```{r logSalePrice Analysis, echo=F}
 fit2 = lm(lSalePrice~GrLivArea, data=train_log)
+# Option 1 for auto-generating summary statistics -- PDF doesn't like, good for HTML quick referencing
+#tab_model(fit2, show.se = T, show.stat = T, string.stat = "t-value", string.p = "p-value", string.se = "Std. Error", pred.labels = #c("Intercept", "Sq. Ft. of Living Area"))
 summary(fit2)
 confint(fit2)
-par(mfrow = c(2, 2))
-plot(fit2)
+CV(fit2)
+resid_panel(fit2, plots=c("resid","qq","ls","index","cookd","lev"))
 preds2 = predict(fit2)
-train_log %>% ggplot(aes(y = lSalePrice, x = GrLivArea)) + geom_point() + geom_smooth(method = "lm")
+train_log %>% ggplot(aes(y = lSalePrice, x = GrLivArea)) + geom_point() + geom_smooth(method = "lm",formula = y~x)
 train_log %>% ggplot(aes(y = lSalePrice, x = GrLivArea)) + geom_point() + geom_line(data = train_log, aes( x = GrLivArea, y = preds2))
 ```
-
-## Log Transform Both GrLivArea and Sale Price
-```{r}
+### log - log Model Analysis:
+Model: $log(\hat{Sale Price}) =  \hat{\beta_0} + \hat{\beta_1} (log(Living Area ft^2)$
+```{r bothLogTransform Analysis, echo=F}
 fit3 = lm(lSalePrice~lGrLivArea, data=train_log)
+# Option 1 for auto-generating summary statistics -- PDF doesn't like, good for HTML quick referencing
+#tab_model(fit3, show.se = T, show.stat = T, string.stat = "t-value", string.p = "p-value", string.se = "Std. Error", pred.labels = #c("Intercept", "Sq. Ft. of Living Area"))
 summary(fit3)
 confint(fit3)
-par(mfrow = c(2, 2))
-plot(fit3)
+CV(fit3)
+resid_panel(fit3, plots=c("resid","qq","ls","index","cookd","lev"))
 preds3 = predict(fit3)
-train_log %>% ggplot(aes(y = lSalePrice, x = lGrLivArea)) + geom_point() + geom_smooth(method = "lm")
+train_log %>% ggplot(aes(y = lSalePrice, x = lGrLivArea)) + geom_point() + geom_smooth(method = "lm", formula = y~x)
 train_log %>% ggplot(aes(y = lSalePrice, x = lGrLivArea)) + geom_point() + geom_line(data = train_log, aes( x = lGrLivArea, y = preds3))
 ```
-#separating based on neighborhood
-```{r}
+### log-log Model with Neighborhood Fits Analysis
+```{r Neighborhood Model Analysis, echo=F}
 fit4 = lm(lSalePrice~lGrLivArea+ Neighborhood, data=train_log)
+# Option 1 for auto-generating summary statistics -- PDF doesn't like, good for HTML quick referencing
+#tab_model(fit4, show.se = T, show.stat = T, string.stat = "t-value", string.p = "p-value", string.se = "Std. Error", pred.labels = #c("Intercept", "Sq. Ft. of Living Area"))
 summary(fit4)
 confint(fit4)
-par(mfrow = c(2, 2))
-plot(fit4)
+CV(fit4)
+resid_panel(fit4, plots=c("resid","qq","ls","index","cookd","lev"))
 preds4 = predict(fit4)
-train_log %>% ggplot(aes(y = lSalePrice, x = lGrLivArea, color=Neighborhood)) + geom_point() + geom_smooth(method = "lm")
+train_log %>% ggplot(aes(y = lSalePrice, x = lGrLivArea, color=Neighborhood)) + geom_point() + geom_smooth(method = "lm",formula = y~x)
 train_log %>% ggplot(aes(y = lSalePrice, x = lGrLivArea, color=Neighborhood)) + geom_point() + geom_line(data = train_log, aes(group=Neighborhood, x = lGrLivArea, y = preds4))
 ```
 
+## Finalized Model Parameters
 
+## Conclusion
 
-#selection models library
-```{r}
-library(olsrr)
-library(cowplot)
-library(ggplot2)
-library(IDPmisc)
-```
+# Analysis 2: What Models Can Accurately Predict the Sales Prices for Homes in all of Ames Iowa for All Neighborhoods?
 
 #only int and numeric type
-```{r}
+```{r echo=F}
 train_q2 = data.frame(train)
 
 train_q2$lGrLivArea = log(train_q2$GrLivArea)
@@ -171,7 +171,7 @@ train_q2 <- data.frame("Id"= train_q2$Id, "MSSubClass"= train_q2$MSSubClass, "Lo
 ```
 
 #adding logged variables to train dataset
-```{r}
+```{r echo=F}
 
 #TotalBsmtSF 
 train_q2$lTotalBsmtSF = log(train_q2$TotalBsmtSF)
@@ -193,33 +193,33 @@ plot_grid(X2ndFlrSF,lX2ndFlrSF, labels = "AUTO")
 ```
 
 #missing vars train_q2
-```{r}
+```{r echo=F}
 gg_miss_var(train_q2)
 #lot frontage, garage year built, MasVnrArea
 ```
 
 #remove lot frontage, garage year built, and masvnrarea
-```{r}
+```{r echo=F}
 
 train_q2 <- data.frame("Id"= train_q2$Id, "MSSubClass"= train_q2$MSSubClass, "LotArea"= train_q2$LotArea, "OverallQual"= train_q2$OverallQual, "OverallCond"= train_q2$OverallCond, "YearBuilt"= train_q2$YearBuilt, "YearRemodAdd"= train_q2$YearRemodAdd, "BsmtFinSF1"= train_q2$BsmtFinSF1, "BsmtFinSF2"= train_q2$BsmtFinSF2, "BsmtUnfSF"= train_q2$BsmtUnfSF, "TotalBsmtSF"= train_q2$TotalBsmtSF, "X1stFlrSF"= train_q2$X1stFlrSF, "X2ndFlrSF"= train_q2$X2ndFlrSF, "LowQualFinSF"= train_q2$LowQualFinSF, "BsmtFullBath"= train_q2$BsmtFullBath, "BsmtHalfBath"= train_q2$BsmtHalfBath, "FullBath"= train_q2$FullBath, "HalfBath"= train_q2$HalfBath, "BedroomAbvGr"= train_q2$BedroomAbvGr, "KitchenAbvGr"= train_q2$KitchenAbvGr, "TotRmsAbvGrd"= train_q2$TotRmsAbvGrd, "Fireplaces"= train_q2$Fireplaces, "GarageCars"= train_q2$GarageCars, "GarageArea"= train_q2$GarageArea, "WoodDeckSF"= train_q2$WoodDeckSF, "OpenPorchSF"= train_q2$OpenPorchSF, "EnclosedPorch"= train_q2$EnclosedPorch, "X3SsnPorch"= train_q2$X3SsnPorch, "ScreenPorch"= train_q2$ScreenPorch, "PoolArea"= train_q2$PoolArea, "MiscVal"= train_q2$MiscVal, "MoSold"= train_q2$MoSold, "YrSold"= train_q2$YrSold, "lGrLivArea"= train_q2$lGrLivArea, "lSalePrice"= train_q2$lSalePrice, "lX2ndFlrSF"= train_q2$lX2ndFlrSF, "lTotalBsmtSF"= train_q2$lTotalBsmtSF, "lX1stFlrSF"= train_q2$lX1stFlrSF)
 ```
 
 
 #Error in lm.fit(x, y, offset = offset, singular.ok = singular.ok, ...) : NA/NaN/Inf in 'x'
-```{r}
+```{r echo=F}
 train_q2 <- NaRV.omit(train_q2)
 ```
 
-#forward
-```{r}
+## Forward Variable Selection Model
+```{r echo=F}
 model_f <- lm(lSalePrice ~., data = train_q2)
 f <-ols_step_forward_p(model_f, details=TRUE)
 plot(f)
 f
 ```
 
-#backward
-```{r}
+## Backward Variable Selection Model
+```{r echo=F}
 model_b <- lm(lSalePrice ~ ., data = train_q2)
 b <-ols_step_backward_p(model_b, details = TRUE)
 plot(b)
@@ -227,8 +227,8 @@ b
 ```
 
 
-#stepwwise
-```{r}
+## Step-Wise Variable Selection Model
+```{r echo=F}
 model_s <- lm(lSalePrice ~ ., data = train_q2)
 s <-ols_step_both_p(model_s, details = TRUE)
 plot(s)
@@ -236,5 +236,6 @@ s
 ```
 
 # Appendix
-```{r ref.label="Residual Plots", eval=F}
-
+## Code
+```{r ref.label=knitr::all_labels(), eval=F}
+```
